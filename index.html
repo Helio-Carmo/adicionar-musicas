@@ -1,0 +1,314 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Adicionar Músicas</title>
+<meta name="theme-color" content="#16131f">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<style>
+  :root {
+    --bg: #16131f; --card: #221d30; --line: #352e48; --text: #f1eef8; --muted: #a39cb8;
+    --accent: #e0457b; --accent-text: #fff; --ok: #3fbf7f; --warn: #e6a23c; --err: #e5534b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  }
+  main { max-width: 560px; margin: 0 auto; }
+  header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  h1 { font-size: 1.35rem; margin: 0; }
+  h2 { font-size: 1rem; margin: 24px 0 8px; color: var(--muted); font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 16px; }
+  textarea, input[type=text], input[type=password] {
+    width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 10px; padding: 12px; font: inherit;
+  }
+  textarea { min-height: 96px; resize: vertical; }
+  textarea:focus, input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+  label { display: block; font-size: .9rem; color: var(--muted); margin: 12px 0 6px; }
+  label:first-child { margin-top: 0; }
+  .row { display: flex; gap: 8px; margin-top: 12px; }
+  button {
+    font: inherit; border: 0; border-radius: 10px; padding: 12px 16px; cursor: pointer;
+    background: var(--line); color: var(--text);
+  }
+  button.primary { background: var(--accent); color: var(--accent-text); font-weight: 600; flex: 1; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.icon { background: transparent; padding: 8px; font-size: 1.3rem; line-height: 1; }
+  .msg { margin-top: 10px; font-size: .9rem; min-height: 1.2em; }
+  .msg.ok { color: var(--ok); } .msg.err { color: var(--err); }
+  ul { list-style: none; margin: 0; padding: 0; }
+  li.run { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin-bottom: 8px; }
+  .run-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+  .badge { font-size: .8rem; padding: 3px 9px; border-radius: 99px; white-space: nowrap; background: var(--line); }
+  .badge.ok { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
+  .badge.err { background: color-mix(in srgb, var(--err) 22%, transparent); color: var(--err); }
+  .badge.run { background: color-mix(in srgb, var(--warn) 22%, transparent); color: var(--warn); }
+  .title { font-size: .9rem; word-break: break-all; margin: 6px 0; }
+  .meta { font-size: .8rem; color: var(--muted); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .meta a { color: var(--accent); }
+  .meta button { padding: 4px 10px; font-size: .8rem; }
+  .check { display: flex; gap: 10px; align-items: center; margin-top: 14px; color: var(--text); font-size: .95rem; }
+  .check input { width: 20px; height: 20px; accent-color: var(--accent); }
+  .hint { font-size: .85rem; color: var(--muted); margin-top: 10px; }
+  .hint a { color: var(--accent); }
+  .empty { color: var(--muted); font-size: .9rem; padding: 8px 0; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>🎵 Adicionar Músicas</h1>
+    <button class="icon" id="btnConfig" aria-label="Configurações">⚙️</button>
+  </header>
+
+  <section id="telaConfig" class="card" hidden>
+    <label for="token">Token do GitHub</label>
+    <input type="password" id="token" autocomplete="off" placeholder="github_pat_...">
+    <label for="repo">Repositório (usuario/repositorio)</label>
+    <input type="text" id="repo" autocomplete="off" autocapitalize="off" placeholder="seu-usuario/adicionar-musicas">
+    <label class="check"><input type="checkbox" id="autoEnviar"> Enviar sozinho quando eu compartilhar do YouTube</label>
+    <div class="row"><button class="primary" id="btnSalvar">Salvar</button></div>
+    <div class="msg" id="msgConfig"></div>
+    <p class="hint">O token fica salvo só neste celular. Veja como criar no arquivo LEIA-ME.md.</p>
+  </section>
+
+  <section id="telaPrincipal" hidden>
+    <div class="card">
+      <label for="links">Link do vídeo, playlist ou canal (pode colar vários, um por linha)</label>
+      <textarea id="links" placeholder="https://youtube.com/..." autocapitalize="off" spellcheck="false"></textarea>
+      <div class="row">
+        <button id="btnColar">📋 Colar</button>
+        <button class="primary" id="btnEnviar">Enviar</button>
+      </div>
+      <div class="msg" id="msg"></div>
+    </div>
+
+    <h2>Últimos envios</h2>
+    <ul id="lista"><li class="empty">Carregando…</li></ul>
+  </section>
+</main>
+
+<script>
+const WORKFLOW = 'processar.yml';
+const $ = (id) => document.getElementById(id);
+
+const store = {
+  get(k, d = '') { try { return localStorage.getItem(k) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
+
+// Em https://usuario.github.io/repositorio/ já descobre o repositório sozinho
+function repoPadrao() {
+  const m = location.hostname.match(/^([^.]+)\.github\.io$/);
+  const pasta = location.pathname.split('/').filter(Boolean)[0];
+  return m && pasta ? `${m[1]}/${pasta}` : '';
+}
+
+const cfg = {
+  get token() { return store.get('token'); },
+  get repo() { return store.get('repo') || repoPadrao(); },
+  get auto() { return store.get('autoEnviar') === '1'; },
+};
+
+async function gh(path, opts = {}) {
+  const res = await fetch(`https://api.github.com/repos/${cfg.repo}${path}`, {
+    ...opts,
+    headers: {
+      Accept: 'application/vnd.github+json',
+      Authorization: `Bearer ${cfg.token}`,
+      'X-GitHub-Api-Version': '2022-11-28',
+      ...(opts.body ? { 'Content-Type': 'application/json' } : {}),
+    },
+  });
+  if (!res.ok) {
+    let detalhe = '';
+    try { detalhe = (await res.json()).message; } catch {}
+    const erro = new Error(
+      res.status === 401 ? 'Token inválido ou expirado.' :
+      res.status === 403 ? 'O token não tem permissão de Actions (leitura e escrita).' :
+      res.status === 404 ? 'Repositório ou workflow não encontrado. Confira o nome e o token.' :
+      detalhe || `Erro ${res.status}`);
+    erro.status = res.status;
+    throw erro;
+  }
+  return res.status === 204 ? null : res.json();
+}
+
+// ---------- Configurações ----------
+function mostrarConfig(mostrar) {
+  $('telaConfig').hidden = !mostrar;
+  $('telaPrincipal').hidden = mostrar;
+  if (mostrar) {
+    $('token').value = cfg.token;
+    $('repo').value = cfg.repo;
+    $('autoEnviar').checked = cfg.auto;
+  }
+}
+
+$('btnConfig').onclick = () => mostrarConfig($('telaConfig').hidden);
+
+$('btnSalvar').onclick = async () => {
+  const msg = $('msgConfig');
+  store.set('token', $('token').value.trim());
+  store.set('repo', $('repo').value.trim().replace(/^https:\/\/github\.com\//, '').replace(/\/$/, ''));
+  store.set('autoEnviar', $('autoEnviar').checked ? '1' : '0');
+  msg.className = 'msg'; msg.textContent = 'Testando…';
+  try {
+    const r = await gh('');
+    store.set('branch', r.default_branch);
+    await gh(`/actions/workflows/${WORKFLOW}`);
+    msg.className = 'msg ok'; msg.textContent = 'Tudo certo!';
+    setTimeout(() => { mostrarConfig(false); carregarLista(); }, 600);
+  } catch (e) {
+    msg.className = 'msg err'; msg.textContent = e.message;
+  }
+};
+
+// ---------- Envio ----------
+function extrairLinks(texto) {
+  return [...new Set((texto.match(/https?:\/\/\S+/g) || [])
+    .filter((u) => /(youtube\.com|youtu\.be)/i.test(u)))];
+}
+
+function aviso(texto, tipo = '') { const m = $('msg'); m.className = `msg ${tipo}`; m.textContent = texto; }
+
+async function enviar() {
+  const links = extrairLinks($('links').value);
+  if (!links.length) return aviso('Cole pelo menos um link do YouTube.', 'err');
+  $('btnEnviar').disabled = true;
+  aviso('Enviando…');
+  try {
+    await gh(`/actions/workflows/${WORKFLOW}/dispatches`, {
+      method: 'POST',
+      body: JSON.stringify({ ref: store.get('branch') || 'main', inputs: { links: links.join('\n') } }),
+    });
+    $('links').value = '';
+    aviso(`✅ Enviado! ${links.length > 1 ? links.length + ' links' : ''} O robô já vai começar.`, 'ok');
+    setTimeout(carregarLista, 3000);
+  } catch (e) {
+    aviso(e.message, 'err');
+  } finally {
+    $('btnEnviar').disabled = false;
+  }
+}
+
+$('btnEnviar').onclick = enviar;
+
+$('btnColar').onclick = async () => {
+  try {
+    const t = await navigator.clipboard.readText();
+    $('links').value = ($('links').value ? $('links').value + '\n' : '') + t.trim();
+  } catch {
+    aviso('Não consegui ler a área de transferência. Cole manualmente.', 'err');
+  }
+};
+
+// ---------- Lista de execuções ----------
+const STATUS = {
+  queued: ['Na fila', 'run'], waiting: ['Na fila', 'run'], pending: ['Na fila', 'run'],
+  requested: ['Na fila', 'run'], in_progress: ['Processando…', 'run'],
+};
+const CONCLUSAO = {
+  success: ['Concluído', 'ok'], failure: ['Com falhas', 'err'], cancelled: ['Cancelado', ''],
+  timed_out: ['Tempo esgotado', 'err'], skipped: ['Ignorado', ''],
+};
+
+function quando(iso) {
+  const min = Math.round((Date.now() - new Date(iso)) / 60000);
+  if (min < 1) return 'agora';
+  if (min < 60) return `há ${min} min`;
+  if (min < 1440) return `há ${Math.round(min / 60)} h`;
+  return new Date(iso).toLocaleDateString('pt-BR');
+}
+
+function duracao(run) {
+  if (run.status !== 'completed') return '';
+  const s = Math.round((new Date(run.updated_at) - new Date(run.run_started_at)) / 1000);
+  return s < 60 ? `${s}s` : `${Math.round(s / 60)} min`;
+}
+
+let timer;
+async function carregarLista() {
+  clearTimeout(timer);
+  const lista = $('lista');
+  try {
+    const { workflow_runs: runs } = await gh(`/actions/workflows/${WORKFLOW}/runs?per_page=15`);
+    lista.replaceChildren();
+    if (!runs.length) {
+      lista.innerHTML = '<li class="empty">Nenhum envio ainda.</li>';
+      return;
+    }
+    let algumRodando = false;
+    for (const run of runs) {
+      const [rotulo, cls] = run.status === 'completed'
+        ? CONCLUSAO[run.conclusion] || [run.conclusion, '']
+        : STATUS[run.status] || [run.status, 'run'];
+      if (run.status !== 'completed') algumRodando = true;
+
+      const li = document.createElement('li'); li.className = 'run';
+      const topo = document.createElement('div'); topo.className = 'run-top';
+      const q = document.createElement('span'); q.className = 'meta'; q.textContent = quando(run.created_at);
+      const b = document.createElement('span'); b.className = `badge ${cls}`; b.textContent = rotulo;
+      topo.append(q, b);
+
+      const t = document.createElement('div'); t.className = 'title'; t.textContent = run.display_title;
+
+      const meta = document.createElement('div'); meta.className = 'meta';
+      const a = document.createElement('a'); a.href = run.html_url; a.target = '_blank'; a.rel = 'noopener';
+      a.textContent = 'Ver detalhes';
+      meta.append(a);
+      const d = duracao(run);
+      if (d) meta.append(Object.assign(document.createElement('span'), { textContent: d }));
+      if (run.status !== 'completed') {
+        const c = document.createElement('button'); c.textContent = 'Cancelar';
+        c.onclick = async () => {
+          if (!confirm('Cancelar este envio?')) return;
+          c.disabled = true;
+          try { await gh(`/actions/runs/${run.id}/cancel`, { method: 'POST' }); setTimeout(carregarLista, 2000); }
+          catch (e) { alert(e.message); c.disabled = false; }
+        };
+        meta.append(c);
+      }
+      li.append(topo, t, meta);
+      lista.append(li);
+    }
+    if (algumRodando) timer = setTimeout(carregarLista, 10000);
+  } catch (e) {
+    lista.innerHTML = '';
+    lista.append(Object.assign(document.createElement('li'), { className: 'empty', textContent: e.message }));
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && !$('telaPrincipal').hidden) carregarLista();
+});
+
+// ---------- Início (inclusive quando vem do "Compartilhar" do YouTube) ----------
+(function iniciar() {
+  const p = new URLSearchParams(location.search);
+  const compartilhado = extrairLinks([p.get('url'), p.get('text'), p.get('title')].filter(Boolean).join(' '));
+  if (location.search) history.replaceState(null, '', location.pathname);
+
+  if (!cfg.token || !cfg.repo) {
+    mostrarConfig(true);
+    return;
+  }
+  mostrarConfig(false);
+  if (compartilhado.length) {
+    $('links').value = compartilhado.join('\n');
+    if (cfg.auto) enviar();
+  }
+  carregarLista();
+})();
+
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+</script>
+</body>
+</html>

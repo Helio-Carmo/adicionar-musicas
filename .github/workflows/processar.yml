@@ -1,0 +1,51 @@
+name: Processar músicas
+run-name: ${{ inputs.links }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      links:
+        description: "Links do YouTube (vídeo, playlist ou canal), um por linha"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  processar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # O yt-dlp precisa de um runtime JavaScript para resolver os desafios do YouTube
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Instalar dependências
+        run: |
+          command -v ffmpeg || (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg)
+          pip install -q -U "yt-dlp[default]" requests google-api-python-client google-auth
+
+      - name: Cookies do YouTube
+        env:
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
+        run: printf '%s' "$YT_COOKIES" > cookies.txt
+
+      - name: Rodar robô
+        env:
+          LINKS: ${{ inputs.links }}
+          API_URL: ${{ secrets.API_URL }}
+          API_SENHA: ${{ secrets.API_SENHA }}
+          DRIVE_PASTA_ID: ${{ secrets.DRIVE_PASTA_ID }}
+          GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+          GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+          GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+          TEMPO_MINIMO_SEGUNDOS: ${{ vars.TEMPO_MINIMO_SEGUNDOS }}
+        run: python worker/processar.py
