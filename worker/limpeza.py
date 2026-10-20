@@ -15,11 +15,12 @@ _LIXO = [
     r"in the style of", r"made famous by", r"original key", r"original", r"audio", r"with lyrics", r"no vocals?",
     r"com letras?", r"com letras? rolantes?", r"sem vocal", r"letras? rolantes?", r"f[aá]cil de cantar", r"arranjo exclusivo", r"no guide melody",
     r"guide melody", r"bvs?", r"with lyrics on screen", r"lyrics on screen", r"on screen", r"karaoke songs with lyrics",
-    r"karaoke songs", r"no lead vocal", r"karaoke video",
+    r"karaoke songs", r"no lead vocal", r"karaoke video", r"explicit", r"explict", r"expl[ií]cito",
 ]
 # Expressões longas primeiro, para "Letra Rolante" sair inteira e não sobrar "Rolante"
 LIXO = "|".join(sorted(_LIXO, key=len, reverse=True))
-SEPARADORES = r"\s+[-–—|•}]\s+|\||\s+-\s*|\s*-\s+"
+GENEROS = r"arrocha|forr[oó]|piseiro|pagode|sertanejo|seresta|brega|funk|samba|gospel|mezzo soprano|soprano|contralto|tenor"
+SEPARADORES =r"\s+[-–—|•}]\s+|\||\s+-\s*|\s*-\s+"
 
 
 def norm(s):
@@ -115,16 +116,30 @@ def limpar_titulo(titulo, artista=None, canal=None):
     t = re.sub(rf"(?i)[\(\[\{{【][^\(\)\[\]\{{\}}【】]*\b({LIXO})\b[^\(\)\[\]\{{\}}【】]*[\)\]\}}】]", " ", t)
     t = re.sub(r"[\U0001F000-\U0001FFFF☀-➿⭐♪-♯]", " ", t)  # emojis 🎤 ⭐ ♬
     t = re.sub(r"[#@]\w+", " ", t)  # hashtags e @canal
+    # Créditos entre parênteses: "(part. Ana Castela)", "(MARI FERNANDEZ, GRELO E NATANZINHO LIMA)"
+    t = re.sub(r"(?i)[\(\[]\s*(part|feat|ft|participa[cç][aã]o)\b\.?[^\)\]]*[\)\]]", " ", t)
+    if artista:
+        t = re.sub(rf"(?i)[\(\[][^\)\]]*{re.escape(artista)}[^\)\]]*[\)\]]", " ", t)
     partes = []
     trechos = re.split(SEPARADORES, t)
     for p in trechos:
         p = re.sub(r"(?i)\b(originally performed by|as popularized by|in the style of|made famous by)\b.*", " ", p)
+        tinha_lixo = re.search(rf"(?i)\b({LIXO})\b", p)
         p = re.sub(rf"(?i)\b({LIXO})\b", " ", p)
+        if tinha_lixo:
+            # "Karaokê de Arrocha", "Playback - Versão Forró": o que sobra é só o estilo, não o nome da música
+            p = re.sub(rf"(?i)\b({GENEROS})\b", " ", p)
+            if not norm(p) or all(w in ("de", "do", "da", "em", "com", "no", "na") for w in norm(p).split()):
+                continue
         if canal and norm(canal) and f" {norm(canal)} " in f" {norm(p)} ":
             # Trecho com o nome do canal são créditos ("Grupo Menos é Mais e Pablo"), não o nome da música
             if len(trechos) > 1:
                 continue
             p = re.sub(re.escape(canal), " ", p, flags=re.I)
+        p = re.sub(r"(?i)[,\s]+by\s*$", " ", p)  # "..., by Fulano" (o Fulano/canal já saiu)
+        if artista:
+            # "Música Artista" no fim do trecho: "Coração Igual ao Teu Julliany Souza"
+            p = re.sub(rf"(?i)[,\s]+{re.escape(artista)}[,\s]*$", " ", p)
         p = re.sub(r"\(\s*\)|\[\s*\]", " ", p)
         p = re.sub(r"\s+", " ", p).strip(" .,:;/\\\"'*~_-")
         # Parêntese sobrando numa ponta: "música (" ou ") música"
