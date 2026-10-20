@@ -69,6 +69,8 @@ Opcional: em **Variables** você pode criar `TEMPO_MINIMO_SEGUNDOS` (padrão 90)
 - **Mais rápido:** no app do YouTube, toque em **Compartilhar → Músicas**. O link já cai no app.
   Ative "Enviar sozinho quando eu compartilhar" nas configurações ⚙️ para nem precisar tocar em Enviar.
 - Ou abra o app, cole um link de vídeo, playlist ou canal (ou vários, um por linha) e toque em **Enviar**.
+- O artista é descoberto pelo título do vídeo (busca no Deezer). Se quiser forçar, escreva na linha
+  `link | Nome do Artista`. Se não achar, usa o nome do canal, como antes.
 - A lista mostra o andamento. "Ver detalhes" abre o log completo e um resumo de cada música.
 
 > O "Compartilhar" direto funciona no Android (Chrome). No iPhone, use o botão Colar.

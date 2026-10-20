@@ -9,6 +9,7 @@ import sys
 import time
 import random
 import re
+import unicodedata
 import requests
 import yt_dlp
 from google.oauth2.credentials import Credentials
@@ -27,6 +28,10 @@ COOKIES = "cookies.txt" if os.path.exists("cookies.txt") and os.path.getsize("co
 
 FORMATO = "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best"
 MIMETYPES = {"mp4": "video/mp4", "webm": "video/webm", "mkv": "video/x-matroska"}
+# Palavras que atrapalham a busca do artista ("Karaoke Version", "Instrumental"...)
+LIXO = (r"karaok[eêé]s?|version|vers[aã]o|instrumental|lyrics?|letra|playback|melody|hd|cc|"
+        r"with backing vocals|w/ ?b\.?v|originally performed by|as popularized by|in the style of|"
+        r"made famous by|original|audio|with lyrics|no vocals?")
 
 resumo = []  # (status, titulo, detalhe) para o relatório final
 
@@ -72,6 +77,39 @@ def mapear_videos(link):
         return videos, True, nome_pai
 
 
+def norm(s):
+    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
+    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", s)).strip()
+
+
+def limpar_busca(texto, canal):
+    if canal:
+        texto = re.sub(re.escape(canal), " ", texto, flags=re.I)
+    texto = re.sub(rf"(?i)\b({LIXO})\b", " ", texto)
+    texto = re.sub(r"[^\w\s'&]", " ", texto)
+    return re.sub(r"\s+", " ", texto).strip()
+
+
+def artista_pelo_titulo(titulo, canal):
+    """Descobre o artista real procurando o título no Deezer. Só aceita se o nome aparece no título do vídeo."""
+    trechos = [limpar_busca(p, canal) for p in re.split(r"\s+[-–|•}]\s+|\|", titulo or "")]
+    trechos = [p for p in trechos if p]
+    nt = norm(titulo)
+    # 1ª tentativa: título inteiro limpo. 2ª: só os dois primeiros trechos ("Música - Artista | ... | Canal")
+    for q in dict.fromkeys([limpar_busca(titulo or "", canal), " ".join(trechos[:2])]):
+        if not q:
+            continue
+        try:
+            dados = requests.get("https://api.deezer.com/search", params={"q": q, "limit": 5}, timeout=15).json().get("data", [])
+        except Exception:
+            return None
+        for faixa in dados:
+            nome = faixa["artist"]["name"]
+            if norm(nome) and norm(nome) in nt and norm(faixa["title_short"]).split()[0] in nt:
+                return nome
+    return None
+
+
 def ja_cadastrado(yt_id):
     try:
         res = requests.get(URL_API, params={"senha": SENHA_API, "action": "verificar", "yt_id": yt_id}, timeout=30)
@@ -101,7 +139,7 @@ def baixar(yt_id):
         return None
 
 
-def processar_link(link, drive, estado):
+def processar_link(link, artista_fixo, drive, estado):
     print(f"\n🔎 Mapeando os vídeos de: {link}")
     try:
         videos, is_playlist, nome_pai = mapear_videos(link)
@@ -116,8 +154,7 @@ def processar_link(link, drive, estado):
         yt_id = v.get("id")
         titulo = v.get("title") or yt_id
         duracao = v.get("duration")
-        # MÁGICA DO ARTISTA (Busca Dupla): uploader do vídeo, senão o dono da playlist/canal
-        artista_yt = v.get("uploader") or v.get("channel") or nome_pai
+        canal = v.get("uploader") or v.get("channel")
 
         if not yt_id:
             continue
@@ -131,12 +168,15 @@ def processar_link(link, drive, estado):
             continue
 
         print(f"🎵 PROCESSANDO ({i}/{len(videos)}): {titulo}")
-        print(f"   🎤 Artista/Canal: {artista_yt} | ID: {yt_id}")
 
         if ja_cadastrado(yt_id):
             print("   ⚠️ PULANDO: Esta música já está cadastrada no seu sistema!")
             resumo.append(("🔁", titulo, "Já cadastrada"))
             continue
+
+        # ARTISTA: o informado no envio > o encontrado pelo título > canal do vídeo > dono da playlist/canal
+        artista_yt = artista_fixo or artista_pelo_titulo(titulo, canal) or canal or nome_pai
+        print(f"   🎤 Artista: {artista_yt} | Canal: {canal} | ID: {yt_id}")
 
         if estado["baixou_algum"]:
             pausa = random.uniform(PAUSA_MIN, PAUSA_MAX)
@@ -189,7 +229,12 @@ def escrever_relatorio():
 
 
 def main():
-    links = re.findall(r"https?://\S+", os.environ.get("LINKS", ""))
+    # Cada linha pode trazer o artista depois de "|": "https://youtu.be/... | Bon Jovi"
+    links = []
+    for linha in os.environ.get("LINKS", "").splitlines():
+        urls = re.findall(r"https?://[^\s|]+", linha)
+        artista = linha.split("|", 1)[1].strip() if len(urls) == 1 and "|" in linha else ""
+        links += [(u, artista) for u in urls]
     if not links:
         sys.exit("Nenhum link recebido.")
 
@@ -200,8 +245,8 @@ def main():
         print("ℹ️ Sem cookies do YouTube configurados (secret YT_COOKIES).")
 
     estado = {"baixou_algum": False}
-    for link in links:
-        processar_link(link, drive, estado)
+    for link, artista in links:
+        processar_link(link, artista.strip() or None, drive, estado)
 
     escrever_relatorio()
     ok = sum(1 for s, *_ in resumo if s == "✅")
