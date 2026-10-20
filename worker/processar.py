@@ -82,6 +82,21 @@ def ja_cadastrado(yt_id):
         return False
 
 
+def cadastrar(dados_post, yt_id):
+    """Cadastra no banco tentando até 3 vezes (queda de conexão). Antes de repetir, confere se já entrou."""
+    for tentativa in range(3):
+        try:
+            res = requests.post(URL_API, params={"action": "cadastrar"}, headers=CABECALHO_API, data=dados_post, timeout=60)
+            res.raise_for_status()
+            return
+        except Exception:
+            if tentativa == 2:
+                raise
+            time.sleep(10)
+            if ja_cadastrado(yt_id):
+                return
+
+
 def baixar(yt_id):
     """Baixa o vídeo e devolve o caminho do arquivo (ou None)."""
     opts = {
@@ -161,12 +176,13 @@ def processar_link(link, artista_fixo, drive, estado):
             print("   ⏳ Subindo o Vídeo pro Drive...")
             meta = {"name": f"{artista_yt} - {titulo_limpo} - {yt_id}.{ext}", "parents": [PASTA_DRIVE_ID]}
             media = MediaFileUpload(arquivo, mimetype=MIMETYPES.get(ext, "video/mp4"), resumable=True)
-            novo_id = drive.files().create(body=meta, media_body=media, fields="id", supportsAllDrives=True).execute()["id"]
+            # num_retries: o Drive às vezes responde 502/503 e a próxima tentativa funciona
+            novo_id = drive.files().create(body=meta, media_body=media, fields="id",
+                                           supportsAllDrives=True).execute(num_retries=5)["id"]
 
             print("   💾 Cadastrando no Banco de Dados...")
             dados_post = {"titulo": titulo_limpo, "artista": artista_yt, "youtube_id": yt_id, "drive_id": novo_id}
-            res = requests.post(URL_API, params={"action": "cadastrar"}, headers=CABECALHO_API, data=dados_post, timeout=60)
-            res.raise_for_status()
+            cadastrar(dados_post, yt_id)
             print("   ✅ Concluído com Sucesso!")
             resumo.append(("✅", titulo_limpo, artista_yt))
         except Exception as err:
