@@ -9,12 +9,12 @@ import sys
 import time
 import random
 import re
-import unicodedata
 import requests
 import yt_dlp
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
+from limpeza import artista_e_titulo
 
 # ================= CONFIGURAÇÕES =================
 URL_API = os.environ["API_URL"]
@@ -29,11 +29,6 @@ COOKIES = "cookies.txt" if os.path.exists("cookies.txt") and os.path.getsize("co
 
 FORMATO = "bestvideo[height<=720][ext=mp4]+bestaudio[ext=m4a]/best[height<=720][ext=mp4]/best"
 MIMETYPES = {"mp4": "video/mp4", "webm": "video/webm", "mkv": "video/x-matroska"}
-# Palavras que atrapalham a busca do artista ("Karaoke Version", "Instrumental"...)
-LIXO = (r"karaok[eêé]s?|version|vers[aã]o|instrumental|lyrics?|letra|playback|melody|hd|cc|"
-        r"with backing vocals|w/ ?b\.?v|originally performed by|as popularized by|in the style of|"
-        r"made famous by|original|audio|with lyrics|no vocals?")
-
 resumo = []  # (status, titulo, detalhe) para o relatório final
 
 
@@ -76,39 +71,6 @@ def mapear_videos(link):
             else:
                 videos.append(e)
         return videos, True, nome_pai
-
-
-def norm(s):
-    s = unicodedata.normalize("NFKD", s or "").encode("ascii", "ignore").decode().lower()
-    return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", s)).strip()
-
-
-def limpar_busca(texto, canal):
-    if canal:
-        texto = re.sub(re.escape(canal), " ", texto, flags=re.I)
-    texto = re.sub(rf"(?i)\b({LIXO})\b", " ", texto)
-    texto = re.sub(r"[^\w\s'&]", " ", texto)
-    return re.sub(r"\s+", " ", texto).strip()
-
-
-def artista_pelo_titulo(titulo, canal):
-    """Descobre o artista real procurando o título no Deezer. Só aceita se o nome aparece no título do vídeo."""
-    trechos = [limpar_busca(p, canal) for p in re.split(r"\s+[-–|•}]\s+|\|", titulo or "")]
-    trechos = [p for p in trechos if p]
-    nt = norm(titulo)
-    # 1ª tentativa: título inteiro limpo. 2ª: só os dois primeiros trechos ("Música - Artista | ... | Canal")
-    for q in dict.fromkeys([limpar_busca(titulo or "", canal), " ".join(trechos[:2])]):
-        if not q:
-            continue
-        try:
-            dados = requests.get("https://api.deezer.com/search", params={"q": q, "limit": 5}, timeout=15).json().get("data", [])
-        except Exception:
-            return None
-        for faixa in dados:
-            nome = faixa["artist"]["name"]
-            if norm(nome) and norm(nome) in nt and norm(faixa["title_short"]).split()[0] in nt:
-                return nome
-    return None
 
 
 def ja_cadastrado(yt_id):
@@ -176,8 +138,10 @@ def processar_link(link, artista_fixo, drive, estado):
             continue
 
         # ARTISTA: o informado no envio > o encontrado pelo título > canal do vídeo > dono da playlist/canal
-        artista_yt = artista_fixo or artista_pelo_titulo(titulo, canal) or canal or nome_pai
-        print(f"   🎤 Artista: {artista_yt} | Canal: {canal} | ID: {yt_id}")
+        # TÍTULO: só o nome da música, sem "Karaoke", canal ou artista
+        artista_achado, titulo_limpo = artista_e_titulo(titulo, canal, artista_fixo)
+        artista_yt = artista_achado or canal or nome_pai
+        print(f"   🎤 Artista: {artista_yt} | Música: {titulo_limpo} | Canal: {canal} | ID: {yt_id}")
 
         if estado["baixou_algum"]:
             pausa = random.uniform(PAUSA_MIN, PAUSA_MAX)
@@ -195,16 +159,16 @@ def processar_link(link, artista_fixo, drive, estado):
         try:
             ext = arquivo.rsplit(".", 1)[-1].lower()
             print("   ⏳ Subindo o Vídeo pro Drive...")
-            meta = {"name": f"{titulo} - {yt_id}.{ext}", "parents": [PASTA_DRIVE_ID]}
+            meta = {"name": f"{artista_yt} - {titulo_limpo} - {yt_id}.{ext}", "parents": [PASTA_DRIVE_ID]}
             media = MediaFileUpload(arquivo, mimetype=MIMETYPES.get(ext, "video/mp4"), resumable=True)
             novo_id = drive.files().create(body=meta, media_body=media, fields="id", supportsAllDrives=True).execute()["id"]
 
             print("   💾 Cadastrando no Banco de Dados...")
-            dados_post = {"titulo": titulo, "artista": artista_yt, "youtube_id": yt_id, "drive_id": novo_id}
+            dados_post = {"titulo": titulo_limpo, "artista": artista_yt, "youtube_id": yt_id, "drive_id": novo_id}
             res = requests.post(URL_API, params={"action": "cadastrar"}, headers=CABECALHO_API, data=dados_post, timeout=60)
             res.raise_for_status()
             print("   ✅ Concluído com Sucesso!")
-            resumo.append(("✅", titulo, artista_yt))
+            resumo.append(("✅", titulo_limpo, artista_yt))
         except Exception as err:
             print(f"   ❌ Erro durante o processo: {err}")
             resumo.append(("❌", titulo, f"Erro: {err}"))
