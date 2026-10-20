@@ -19,6 +19,7 @@ from googleapiclient.http import MediaFileUpload
 # ================= CONFIGURAÇÕES =================
 URL_API = os.environ["API_URL"]
 SENHA_API = os.environ["API_SENHA"]
+CABECALHO_API = {"X-Migracao-Senha": SENHA_API}  # senha no cabeçalho, fora da URL
 PASTA_DRIVE_ID = os.environ["DRIVE_PASTA_ID"]
 TEMPO_MINIMO_SEGUNDOS = int(os.environ.get("TEMPO_MINIMO_SEGUNDOS") or 90)
 # Pausa entre um download e outro (anti-bloqueio do YouTube), igual ao --sleep-interval do Colab
@@ -112,7 +113,7 @@ def artista_pelo_titulo(titulo, canal):
 
 def ja_cadastrado(yt_id):
     try:
-        res = requests.get(URL_API, params={"senha": SENHA_API, "action": "verificar", "yt_id": yt_id}, timeout=30)
+        res = requests.get(URL_API, params={"action": "verificar", "yt_id": yt_id}, headers=CABECALHO_API, timeout=30)
         return res.json().get("existe") == True
     except Exception:
         print("   ⚠️ Erro ao verificar duplicidade. Tentando baixar mesmo assim...")
@@ -200,7 +201,7 @@ def processar_link(link, artista_fixo, drive, estado):
 
             print("   💾 Cadastrando no Banco de Dados...")
             dados_post = {"titulo": titulo, "artista": artista_yt, "youtube_id": yt_id, "drive_id": novo_id}
-            res = requests.post(URL_API, params={"senha": SENHA_API, "action": "cadastrar"}, data=dados_post, timeout=60)
+            res = requests.post(URL_API, params={"action": "cadastrar"}, headers=CABECALHO_API, data=dados_post, timeout=60)
             res.raise_for_status()
             print("   ✅ Concluído com Sucesso!")
             resumo.append(("✅", titulo, artista_yt))
